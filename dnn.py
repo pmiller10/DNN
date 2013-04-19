@@ -18,13 +18,13 @@ class DNN(object):
         mid_layers.pop()
         params = []
         for i,current in enumerate(mid_layers):
-            prior = layers[i]
+            prior = self.layers[i]
             ds = SupervisedDataSet(prior,prior)
             for d in training_data: ds.addSample(d, d)
     
             temp_nn = buildNetwork(prior, current, prior, bias=False)
             trainer = BackpropTrainer(temp_nn, dataset=ds, momentum=0.1, verbose=False, weightdecay=0.01)
-            trainer.trainEpochs(10)
+            trainer.trainEpochs(100)
             params += self.strip_params(temp_nn, prior, current)
 
             """ Compress the training data """
@@ -37,42 +37,49 @@ class DNN(object):
         """ Train the softmax layer """
         softmax_layer = buildNetwork(self.layers[-2], self.layers[-1], bias=False)
         ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        print "----"
-        print ds
-        print "----"
-        print softmax_layer
-        print "----"
         for i,d in enumerate(training_data):
-            target = targets[i]
-            print d
-            print target
+            target = self.targets[i]
             ds.addSample(d, target)
-        trainer = BackpropTrainer(temp_nn, dataset=ds, momentum=0.1, verbose=False, weightdecay=0.01)
-        trainer.trainEpochs(10)
-        params += self.strip_params(temp_nn, prior, current)
+        trainer = BackpropTrainer(softmax_layer, dataset=ds, momentum=0.1, verbose=False, weightdecay=0.01)
+        trainer.trainEpochs(100)
+        params += self.strip_params(softmax_layer, prior, current)
 
         real_nn = self.real_nn()
         real_nn.params[:] = params
+
+        """ smoothing """
+        ds = SupervisedDataSet(self.layers[0], self.layers[-1])
+        real_nn
+        for i,d in enumerate(self.data):
+            target = self.targets[i]
+            ds.addSample(d, target)
+        trainer = BackpropTrainer(real_nn, dataset=ds, momentum=0.1, verbose=True, weightdecay=0.01)
+        trainer.trainEpochs(100)
+        return real_nn
         
     def real_nn(self):
-        return buildNetwork(layers[0], layers[1], layers[2], bias=False)
+        return buildNetwork(self.layers[0], self.layers[1], self.layers[2], bias=False)
 
     """ Accesses the relevant params from the current NN """
     def strip_params(self, temp_nn, prior, current):
         count = prior * current
         p = temp_nn.params[:count]
-        print p
         return list(p)
 
-    def layer(self):
-        pass
 
+def test():
+    a = [0,0,1,1]
+    b = [1,1,0,1]
+    c = [1,1,1,1]
+    d = [0,0,0,0]
+    data = [a,b,c,d]
+    #targets = [0.5,0.5,1,0]
+    targets = [1,1,0,0]
+    layers = [4,2,1]
+    dnn = DNN(data, targets, layers)
+    print dnn.nn.activate([0,0,0,0])
+    print dnn.nn.activate([0,0,1,1])
+    print dnn.nn.activate([1,1,0,0])
+    print dnn.nn.activate([1,1,1,1])
 
-a = [0,0,1,1]
-b = [1,1,0,1]
-c = [1,1,1,1]
-d = [0,0,0,0]
-data = [a,b,c,d]
-targets = [1,0,1,0]
-layers = [4,2,1]
-dnn = DNN(data, targets, layers)
+test()
