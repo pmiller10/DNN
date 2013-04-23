@@ -40,6 +40,7 @@ class DNN(object):
             raise Exception("final_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
 
     def predict(self, data):
+        if not self.nn: raise Exception("You must run .fit() before you can predict")
         for nn in self.nn:
             data = nn.activate(data)
         return data
@@ -72,6 +73,7 @@ class DNN(object):
             layer.params[:] = compression_params
             self.nn.append(layer)
             compressed_data = [layer.activate(d) for d in compressed_data]
+            print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
         """ Train the softmax layer """
         softmax_layer = buildNetwork(self.layers[-2], self.layers[-1], bias=self.bias, outclass=self.final_layer)
@@ -138,4 +140,4 @@ def test():
     for d in data:
         print dnn.predict(d)
 
-test()
+#test()
