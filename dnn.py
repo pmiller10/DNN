@@ -51,7 +51,6 @@ class DNN(object):
             #raise Exception("You must run DNN().fit() before you can use predict()") # TODO initialize this with an initial neural network
 
     def fit(self):
-# TODO try saving the hidden layers!! reconstruct the network like that!
         hidden_layers = []
         bias_layers = []
         compressed_data = self.data # it isn't compressed at this point, but will be later on
@@ -64,22 +63,23 @@ class DNN(object):
             bottleneck = FeedForwardNetwork()
             in_layer = LinearLayer(prior)
             hidden_layer = self.hidden_layer(current)
-            #bias1 = BiasUnit()
-            #bias2 = BiasUnit()
             out_layer = self.hidden_layer(prior)
             bottleneck.addInputModule(in_layer)
             bottleneck.addModule(hidden_layer)
-            #bottleneck.addModule(bias1)
-            #bottleneck.addModule(bias2)
             bottleneck.addOutputModule(out_layer)
             in_to_hidden = FullConnection(in_layer, hidden_layer)
             hidden_to_out = FullConnection(hidden_layer, out_layer)
-            #bias_in = FullConnection(bias1, hidden_layer)
-            #bias_hidden = FullConnection(bias2, out_layer)
             bottleneck.addConnection(in_to_hidden)
             bottleneck.addConnection(hidden_to_out)
-            #bottleneck.addConnection(bias_in)
-            #bottleneck.addConnection(bias_hidden)
+            if self.bias:
+                bias1 = BiasUnit()
+                bias2 = BiasUnit()
+                bottleneck.addModule(bias1)
+                bottleneck.addModule(bias2)
+                bias_in = FullConnection(bias1, hidden_layer)
+                bias_hidden = FullConnection(bias2, out_layer)
+                bottleneck.addConnection(bias_in)
+                bottleneck.addConnection(bias_hidden)
             bottleneck.sortModules()
 
             """ train the bottleneck """
@@ -90,8 +90,9 @@ class DNN(object):
             print "ABOUT TO APPEND"
             #print in_to_hidden.params
             print len(in_to_hidden.params)
+
             hidden_layers.append(in_to_hidden)
-            #if self.bias: bias_layers.append(bias1)
+            if self.bias: bias_layers.append(bias_in)
 
             """ use the params from the bottleneck to compress the training data """
             compressor = FeedForwardNetwork()
@@ -101,7 +102,6 @@ class DNN(object):
             compressor.sortModules()
             compressed_data = [compressor.activate(d) for d in compressed_data]
 
-            #bias_layers.append(bias1)
             self.nn.append(compressor)
             #print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
@@ -109,15 +109,17 @@ class DNN(object):
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
         out_layer = self.final_layer(self.layers[-1])
-        #bias = BiasUnit()
         softmax.addInputModule(in_layer)
-        #softmax.addModule(bias)
         softmax.addOutputModule(out_layer)
         in_to_out = FullConnection(in_layer, out_layer)
-        #bias_in = FullConnection(bias, out_layer)
         softmax.addConnection(in_to_out)
-        #softmax.addConnection(bias_in)
+        if self.bias:
+            bias = BiasUnit()
+            softmax.addModule(bias)
+            bias_in = FullConnection(bias, out_layer)
+            softmax.addConnection(bias_in)
         softmax.sortModules()
+
         ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
         for i,d in enumerate(compressed_data):
             target = self.targets[i]
@@ -128,10 +130,13 @@ class DNN(object):
         print "ABOUT TO APPEND"
         print len(in_to_out.params)
         hidden_layers.append(in_to_out)
+        if self.bias: bias_layers.append(bias_in)
 
-        """ recreate the whole thing """
+        """ Recreate the whole thing """
         print "hidden layers: " + str(hidden_layers)
+        print "bias layers: " + str(bias_layers)
         print "len hidden layers: " + str(len(hidden_layers))
+        print "len bias layers: " + str(len(bias_layers))
         # connect the first two
         full = FeedForwardNetwork()
         first_layer = hidden_layers[0].inmod
@@ -141,9 +146,18 @@ class DNN(object):
         connection.params[:] = hidden_layers[0].params
         full.addConnection(connection)
         full.addModule(next_layer)
+        if self.bias:
+            bias = bias_layers[0]
+            bias_unit = bias.inmod
+            full.addModule(bias_unit)
+            connection = FullConnection(bias_unit, next_layer)
+            print bias.params
+            connection.params[:] = bias.params
+            full.addConnection(connection)
+            print connection.params
 
         # connect the middle layers
-        for h in hidden_layers[1:-1]:
+        for i,h in enumerate(hidden_layers[1:-1]):
             new_next_layer = h.outmod
             full.addModule(new_next_layer)
             connection = FullConnection(next_layer, new_next_layer)
@@ -151,12 +165,27 @@ class DNN(object):
             full.addConnection(connection)
             next_layer = new_next_layer
 
+            if self.bias:
+                bias = bias_layers[i+1]
+                bias_unit = bias.inmod
+                full.addModule(bias_unit)
+                connection = FullConnection(bias_unit, next_layer)
+                connection.params[:] = bias.params
+                full.addConnection(connection)
+
         # connect 2nd to last and last
         last_layer = hidden_layers[-1].outmod
         full.addOutputModule(last_layer)
         connection = FullConnection(next_layer, last_layer)
         connection.params[:] = hidden_layers[-1].params
         full.addConnection(connection)
+        if self.bias:
+            bias = bias_layers[-1]
+            bias_unit = bias.inmod
+            full.addModule(bias_unit)
+            connection = FullConnection(bias_unit, last_layer)
+            connection.params[:] = bias.params
+            full.addConnection(connection)
 
         full.sortModules()
         return full

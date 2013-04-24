@@ -30,10 +30,11 @@ matrix = Preprocess.to_matrix(list(boston.data))
 matrix = Preprocess.scale(matrix)
 matrix = list(matrix)
 target = list(boston.target)
-layers = [13,7,1]
+layers = [13,6,1]
 
-dnn = DNN(matrix, target, layers, hidden_layer="SigmoidLayer", final_layer="LinearLayer", compression_epochs=20, smoothing_epochs=0, bias=True)
+dnn = DNN(matrix, target, layers, hidden_layer="TanhLayer", final_layer="LinearLayer", compression_epochs=20, smoothing_epochs=0, bias=True)
 full = dnn.fit()
+print full
 #preds = [dnn.predict(d)[0] for d in matrix]
 preds = [full.activate(d)[0] for d in matrix]
 
