@@ -1,7 +1,7 @@
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.datasets import SupervisedDataSet
-from pybrain.structure.modules import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer
+from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer, BiasUnit, FeedForwardNetwork, FullConnection
 
 class DNN(object):
 
@@ -51,70 +51,115 @@ class DNN(object):
             #raise Exception("You must run DNN().fit() before you can use predict()") # TODO initialize this with an initial neural network
 
     def fit(self):
-        compressed_data = self.data # NOTE: it isn't compressed at this point, but will be later on
-        mid_layers = self.layers[1:] # remove the first
-        mid_layers.pop() # remove the last to get only the layers in the middle
-        params = []
+# TODO try saving the hidden layers!! reconstruct the network like that!
+        hidden_layers = []
+        bias_layers = []
+        compressed_data = self.data # it isn't compressed at this point, but will be later on
+        mid_layers = self.layers[1:-1] # remove the first and last
         for i,current in enumerate(mid_layers):
-            """ build the NN with a bottleneck """
             prior = self.layers[i] # This accesses the layer before the "current" one, since the indexing in mid_layers and self.layers is offset by 1
+            #print "Compressed data at stage {0} {1}".format(i, compressed_data)
+
+            """ build the NN with a bottleneck """
+            bottleneck = FeedForwardNetwork()
+            in_layer = LinearLayer(prior)
+            hidden_layer = self.hidden_layer(current)
+            #bias1 = BiasUnit()
+            #bias2 = BiasUnit()
+            out_layer = self.hidden_layer(prior)
+            bottleneck.addInputModule(in_layer)
+            bottleneck.addModule(hidden_layer)
+            #bottleneck.addModule(bias1)
+            #bottleneck.addModule(bias2)
+            bottleneck.addOutputModule(out_layer)
+            in_to_hidden = FullConnection(in_layer, hidden_layer)
+            hidden_to_out = FullConnection(hidden_layer, out_layer)
+            #bias_in = FullConnection(bias1, hidden_layer)
+            #bias_hidden = FullConnection(bias2, out_layer)
+            bottleneck.addConnection(in_to_hidden)
+            bottleneck.addConnection(hidden_to_out)
+            #bottleneck.addConnection(bias_in)
+            #bottleneck.addConnection(bias_hidden)
+            bottleneck.sortModules()
+
+            """ train the bottleneck """
             ds = SupervisedDataSet(prior,prior)
             for d in compressed_data: ds.addSample(d, d)
-            #print "Compressed data at stage {0} {1}".format(i, compressed_data)
-            bottleneck = buildNetwork(prior, current, prior, bias=self.bias, hiddenclass=self.hidden_layer, outclass=self.hidden_layer)
             trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
             trainer.trainEpochs(self.compression_epochs)
-            compression_params = self.strip_params(bottleneck, prior, current)
-            params += compression_params 
+            print "ABOUT TO APPEND"
+            #print in_to_hidden.params
+            print len(in_to_hidden.params)
+            hidden_layers.append(in_to_hidden)
+            #if self.bias: bias_layers.append(bias1)
 
-            """ Compress the training data """
-            layer = buildNetwork(prior, current, bias=self.bias, outclass=self.hidden_layer)
-            layer.sortModules()
-            layer.params[:] = compression_params
-            self.nn.append(layer)
-            compressed_data = [layer.activate(d) for d in compressed_data]
-            print "Compressed data after stage {0} {1}".format(i, compressed_data)
+            """ use the params from the bottleneck to compress the training data """
+            compressor = FeedForwardNetwork()
+            compressor.addInputModule(in_layer)
+            compressor.addOutputModule(hidden_layer) # use the hidden layer from above
+            compressor.addConnection(in_to_hidden)
+            compressor.sortModules()
+            compressed_data = [compressor.activate(d) for d in compressed_data]
+
+            #bias_layers.append(bias1)
+            self.nn.append(compressor)
+            #print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
         """ Train the softmax layer """
-        softmax_layer = buildNetwork(self.layers[-2], self.layers[-1], bias=self.bias, outclass=self.final_layer)
+        softmax = FeedForwardNetwork()
+        in_layer = LinearLayer(self.layers[-2])
+        out_layer = self.final_layer(self.layers[-1])
+        #bias = BiasUnit()
+        softmax.addInputModule(in_layer)
+        #softmax.addModule(bias)
+        softmax.addOutputModule(out_layer)
+        in_to_out = FullConnection(in_layer, out_layer)
+        #bias_in = FullConnection(bias, out_layer)
+        softmax.addConnection(in_to_out)
+        #softmax.addConnection(bias_in)
+        softmax.sortModules()
         ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
         for i,d in enumerate(compressed_data):
             target = self.targets[i]
             ds.addSample(d, target)
-        trainer = BackpropTrainer(softmax_layer, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
+        trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
         trainer.trainEpochs(self.compression_epochs)
-        self.nn.append(softmax_layer)
-        params += list(softmax_layer.params)
+        self.nn.append(softmax)
+        print "ABOUT TO APPEND"
+        print len(in_to_out.params)
+        hidden_layers.append(in_to_out)
 
-        """ smoothing """
-        # right now this isn't being used
-        #real_nn = self.real_nn()
-        #real_nn.params[:] = params
-        #ds = SupervisedDataSet(self.layers[0], self.layers[-1])
-        #real_nn
-        #for i,d in enumerate(self.data):
-        #    target = self.targets[i]
-        #    ds.addSample(d, target)
-        #trainer = BackpropTrainer(real_nn, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
-        #trainer.trainEpochs(self.smoothing_epochs)
-        #self.nn = real_nn # TODO testing only
-        
-    def real_nn(self):
-        nn = buildNetwork(self.layers[0], self.layers[1], self.layers[2], bias=self.bias, hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        nn.sortModules()
-        return nn
+        """ recreate the whole thing """
+        print "hidden layers: " + str(hidden_layers)
+        print "len hidden layers: " + str(len(hidden_layers))
+        # connect the first two
+        full = FeedForwardNetwork()
+        first_layer = hidden_layers[0].inmod
+        next_layer = hidden_layers[0].outmod
+        full.addInputModule(first_layer)
+        connection = FullConnection(first_layer, next_layer)
+        connection.params[:] = hidden_layers[0].params
+        full.addConnection(connection)
+        full.addModule(next_layer)
 
-    """ Accesses the relevant params from the current NN """
-    def strip_params(self, temp_nn, prior_dims, current_dims):
-        count = prior_dims * current_dims
-        temp_params = list(temp_nn.params[:count])
-        if self.bias:
-            out_bias = prior_dims
-            hidden_bias = current_dims
-            bias_params = temp_nn.params[count:(count+hidden_bias)]
-            temp_params += list(bias_params)
-        return temp_params
+        # connect the middle layers
+        for h in hidden_layers[1:-1]:
+            new_next_layer = h.outmod
+            full.addModule(new_next_layer)
+            connection = FullConnection(next_layer, new_next_layer)
+            connection.params[:] = h.params
+            full.addConnection(connection)
+            next_layer = new_next_layer
 
+        # connect 2nd to last and last
+        last_layer = hidden_layers[-1].outmod
+        full.addOutputModule(last_layer)
+        connection = FullConnection(next_layer, last_layer)
+        connection.params[:] = hidden_layers[-1].params
+        full.addConnection(connection)
+
+        full.sortModules()
+        return full
 
 def test():
     data = []
