@@ -92,9 +92,9 @@ class AutoEncoder(object):
             for d in compressed_data: ds.addSample(d, d)
             trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
             trainer.trainEpochs(self.compression_epochs)
-            print "ABOUT TO APPEND"
+            #print "ABOUT TO APPEND"
             #print in_to_hidden.params
-            print len(in_to_hidden.params)
+            #print len(in_to_hidden.params)
 
             hidden_layers.append(in_to_hidden)
             if self.bias: bias_layers.append(bias_in)
@@ -132,16 +132,16 @@ class AutoEncoder(object):
         trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
-        print "ABOUT TO APPEND"
-        print len(in_to_out.params)
+        #print "ABOUT TO APPEND"
+        #print len(in_to_out.params)
         hidden_layers.append(in_to_out)
         if self.bias: bias_layers.append(bias_in)
 
         """ Recreate the whole thing """
-        print "hidden layers: " + str(hidden_layers)
-        print "bias layers: " + str(bias_layers)
-        print "len hidden layers: " + str(len(hidden_layers))
-        print "len bias layers: " + str(len(bias_layers))
+        #print "hidden layers: " + str(hidden_layers)
+        #print "bias layers: " + str(bias_layers)
+        #print "len hidden layers: " + str(len(hidden_layers))
+        #print "len bias layers: " + str(len(bias_layers))
         # connect the first two
         autoencoder = FeedForwardNetwork()
         first_layer = hidden_layers[0].inmod
@@ -152,7 +152,7 @@ class AutoEncoder(object):
         autoencoder.addConnection(connection)
 
         # decide whether this should be the output layer or not
-        if self.autoencoding_only and (self.layers) <= 2:
+        if self.autoencoding_only and (len(self.layers) <= 3): # TODO change this to 2 when you aren't using the softmax above
             autoencoder.addOutputModule(next_layer)
         else:
             autoencoder.addModule(next_layer)
@@ -161,10 +161,10 @@ class AutoEncoder(object):
             bias_unit = bias.inmod
             autoencoder.addModule(bias_unit)
             connection = FullConnection(bias_unit, next_layer)
-            print bias.params
+            #print bias.params
             connection.params[:] = bias.params
             autoencoder.addConnection(connection)
-            print connection.params
+            #print connection.params
 
         # connect the middle layers
         for i,h in enumerate(hidden_layers[1:-1]):
@@ -231,13 +231,13 @@ def test():
     targets.append(1)
     targets.append(1)
 
-    layers = [4,3,2,1]
-    #dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=True)
-    dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=False)
+    layers = [4,2,1]
+    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=True)
+    #dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=False)
     dnn = dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
     print "\n-----"
     for d in data:
         print dnn.activate(d)
 
-test()
+#test()
