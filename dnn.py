@@ -3,7 +3,7 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.datasets import SupervisedDataSet
 from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer, BiasUnit, FeedForwardNetwork, FullConnection
 
-class DNN(object):
+class AutoEncoder(object):
 
     def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True):
         self.layers = layers
@@ -40,7 +40,7 @@ class DNN(object):
             raise Exception("final_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
 
     def predict(self, data):
-        if not self.nn: raise Exception("You must run .fit() before you can predict")
+        if not self.nn: raise Exception("You must run .train() before you can predict")
         for nn in self.nn:
             data = nn.activate(data)
         return data
@@ -48,9 +48,9 @@ class DNN(object):
         #if self.nn:
             #return self.nn.activate(data)
         #else:
-            #raise Exception("You must run DNN().fit() before you can use predict()") # TODO initialize this with an initial neural network
+            #raise Exception("You must run DNN().train() before you can use predict()") # TODO initialize this with an initial neural network
 
-    def fit(self):
+    def train(self):
         hidden_layers = []
         bias_layers = []
         compressed_data = self.data # it isn't compressed at this point, but will be later on
@@ -173,6 +173,9 @@ class DNN(object):
                 connection.params[:] = bias.params
                 full.addConnection(connection)
 
+        return self.top_layer(full, hidden_layers, next_layer, bias_layers)
+
+    def top_layer(self, full, hidden_layers, next_layer, bias_layers):
         # connect 2nd to last and last
         last_layer = hidden_layers[-1].outmod
         full.addOutputModule(last_layer)
@@ -189,6 +192,9 @@ class DNN(object):
 
         full.sortModules()
         return full
+
+class DNNRegressor(AutoEncoder):
+    pass
 
 def test():
     data = []
@@ -208,10 +214,10 @@ def test():
     targets.append(1)
 
     layers = [4,1,1]
-    dnn = DNN(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=500, smoothing_epochs=0, bias=True)
-    dnn.fit()
+    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=5, smoothing_epochs=0, bias=True)
+    dnn.train()
     data.append([0.9, 0.8, 0, 0.1])
     for d in data:
         print dnn.predict(d)
 
-#test()
+test()
