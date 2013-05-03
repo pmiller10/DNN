@@ -40,17 +40,17 @@ class AutoEncoder(object):
             raise Exception("final_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
 
     def predict(self, data):
-        if not self.nn: raise Exception("You must run .train() before you can predict")
+        if not self.nn: raise Exception("You must run ._train() before you can predict")
         for nn in self.nn:
             data = nn.activate(data)
         return data
-    #def predict(self, data):
-        #if self.nn:
-            #return self.nn.activate(data)
-        #else:
-            #raise Exception("You must run DNN().train() before you can use predict()") # TODO initialize this with an initial neural network
 
-    def train(self):
+    def fit(self):
+        autoencoder, _, _, _ = self._train()
+        autoencoder.sortModules()
+        return autoencoder
+
+    def _train(self):
         hidden_layers = []
         bias_layers = []
         compressed_data = self.data # it isn't compressed at this point, but will be later on
@@ -138,63 +138,66 @@ class AutoEncoder(object):
         print "len hidden layers: " + str(len(hidden_layers))
         print "len bias layers: " + str(len(bias_layers))
         # connect the first two
-        full = FeedForwardNetwork()
+        autoencoder = FeedForwardNetwork()
         first_layer = hidden_layers[0].inmod
         next_layer = hidden_layers[0].outmod
-        full.addInputModule(first_layer)
+        autoencoder.addInputModule(first_layer)
         connection = FullConnection(first_layer, next_layer)
         connection.params[:] = hidden_layers[0].params
-        full.addConnection(connection)
-        full.addModule(next_layer)
+        autoencoder.addConnection(connection)
+        autoencoder.addModule(next_layer)
         if self.bias:
             bias = bias_layers[0]
             bias_unit = bias.inmod
-            full.addModule(bias_unit)
+            autoencoder.addModule(bias_unit)
             connection = FullConnection(bias_unit, next_layer)
             print bias.params
             connection.params[:] = bias.params
-            full.addConnection(connection)
+            autoencoder.addConnection(connection)
             print connection.params
 
         # connect the middle layers
         for i,h in enumerate(hidden_layers[1:-1]):
             new_next_layer = h.outmod
-            full.addModule(new_next_layer)
+            autoencoder.addModule(new_next_layer)
             connection = FullConnection(next_layer, new_next_layer)
             connection.params[:] = h.params
-            full.addConnection(connection)
+            autoencoder.addConnection(connection)
             next_layer = new_next_layer
 
             if self.bias:
                 bias = bias_layers[i+1]
                 bias_unit = bias.inmod
-                full.addModule(bias_unit)
+                autoencoder.addModule(bias_unit)
                 connection = FullConnection(bias_unit, next_layer)
                 connection.params[:] = bias.params
-                full.addConnection(connection)
+                autoencoder.addConnection(connection)
 
-        return self.top_layer(full, hidden_layers, next_layer, bias_layers)
+        return autoencoder, hidden_layers, next_layer, bias_layers
 
-    def top_layer(self, full, hidden_layers, next_layer, bias_layers):
+class DNNRegressor(AutoEncoder):
+
+    def fit(self):
+        autoencoder, hidden_layers, next_layer, bias_layers = self._train()
+        return self.top_layer(autoencoder, hidden_layers, next_layer, bias_layers)
+
+    def top_layer(self, autoencoder, hidden_layers, next_layer, bias_layers):
         # connect 2nd to last and last
         last_layer = hidden_layers[-1].outmod
-        full.addOutputModule(last_layer)
+        autoencoder.addOutputModule(last_layer)
         connection = FullConnection(next_layer, last_layer)
         connection.params[:] = hidden_layers[-1].params
-        full.addConnection(connection)
+        autoencoder.addConnection(connection)
         if self.bias:
             bias = bias_layers[-1]
             bias_unit = bias.inmod
-            full.addModule(bias_unit)
+            autoencoder.addModule(bias_unit)
             connection = FullConnection(bias_unit, last_layer)
             connection.params[:] = bias.params
-            full.addConnection(connection)
+            autoencoder.addConnection(connection)
 
-        full.sortModules()
-        return full
-
-class DNNRegressor(AutoEncoder):
-    pass
+        autoencoder.sortModules()
+        return autoencoder
 
 def test():
     data = []
@@ -213,10 +216,11 @@ def test():
     targets.append(1)
     targets.append(1)
 
-    layers = [4,1,1]
+    layers = [4,3,1]
     dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=5, smoothing_epochs=0, bias=True)
-    dnn.train()
+    dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
+    print "\n-----"
     for d in data:
         print dnn.predict(d)
 
