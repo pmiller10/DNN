@@ -3,9 +3,13 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.datasets import SupervisedDataSet
 from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer, BiasUnit, FeedForwardNetwork, FullConnection
 
+""" At this point, to use the autoencoder, you must always add one more layer into the layers argument than you actually want.
+If you want 3 layers with dimensions 10,8,5 then you use layers=[10,8,5,1], where the 1 can be any number you want. This is because
+the softmax layer still expects to be trained. It should eventually be moved to a different class."""
+
 class AutoEncoder(object):
 
-    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True):
+    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True, autoencoding_only=True):
         self.layers = layers
         self.data = data
         self.targets = targets
@@ -13,6 +17,7 @@ class AutoEncoder(object):
         self.smoothing_epochs = smoothing_epochs
         self.verbose = verbose
         self.bias = bias
+        self.autoencoding_only = autoencoding_only
         self.nn = []
 
         # compression layer
@@ -105,7 +110,7 @@ class AutoEncoder(object):
             self.nn.append(compressor)
             #print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
-        """ Train the softmax layer """
+	    """ Train the softmax layer """
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
         out_layer = self.final_layer(self.layers[-1])
@@ -145,7 +150,12 @@ class AutoEncoder(object):
         connection = FullConnection(first_layer, next_layer)
         connection.params[:] = hidden_layers[0].params
         autoencoder.addConnection(connection)
-        autoencoder.addModule(next_layer)
+
+        # decide whether this should be the output layer or not
+        if self.autoencoding_only and (self.layers) <= 2:
+            autoencoder.addOutputModule(next_layer)
+        else:
+            autoencoder.addModule(next_layer)
         if self.bias:
             bias = bias_layers[0]
             bias_unit = bias.inmod
@@ -159,7 +169,12 @@ class AutoEncoder(object):
         # connect the middle layers
         for i,h in enumerate(hidden_layers[1:-1]):
             new_next_layer = h.outmod
-            autoencoder.addModule(new_next_layer)
+
+            # decide whether this should be the output layer or not
+            if self.autoencoding_only and i == (len(hidden_layers) - 3):
+                autoencoder.addOutputModule(new_next_layer)
+            else:
+                autoencoder.addModule(new_next_layer)
             connection = FullConnection(next_layer, new_next_layer)
             connection.params[:] = h.params
             autoencoder.addConnection(connection)
@@ -216,12 +231,13 @@ def test():
     targets.append(1)
     targets.append(1)
 
-    layers = [4,3,1]
-    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=5, smoothing_epochs=0, bias=True)
-    dnn.fit()
+    layers = [4,3,2,1]
+    #dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=True)
+    dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=False)
+    dnn = dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
     print "\n-----"
     for d in data:
-        print dnn.predict(d)
+        print dnn.activate(d)
 
 test()
