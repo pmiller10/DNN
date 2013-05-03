@@ -2,6 +2,8 @@ from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.datasets import SupervisedDataSet
 from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer, BiasUnit, FeedForwardNetwork, FullConnection
+import numpy
+import copy
 
 """ At this point, to use the autoencoder, you must always add one more layer into the layers argument than you actually want.
 If you want 3 layers with dimensions 10,8,5 then you use layers=[10,8,5,1], where the 1 can be any number you want. This is because
@@ -9,7 +11,7 @@ the softmax layer still expects to be trained. It should eventually be moved to 
 
 class AutoEncoder(object):
 
-    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True, autoencoding_only=True):
+    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
         self.layers = layers
         self.data = data
         self.targets = targets
@@ -19,6 +21,7 @@ class AutoEncoder(object):
         self.bias = bias
         self.autoencoding_only = autoencoding_only
         self.nn = []
+        self.dropout_on = dropout_on
 
         # compression layer
         if hidden_layer == "SigmoidLayer":
@@ -58,7 +61,8 @@ class AutoEncoder(object):
     def _train(self):
         hidden_layers = []
         bias_layers = []
-        compressed_data = self.data # it isn't compressed at this point, but will be later on
+        compressed_data = copy.copy(self.data) # it isn't compressed at this point, but will be later on
+
         mid_layers = self.layers[1:-1] # remove the first and last
         for i,current in enumerate(mid_layers):
             prior = self.layers[i] # This accesses the layer before the "current" one, since the indexing in mid_layers and self.layers is offset by 1
@@ -89,7 +93,13 @@ class AutoEncoder(object):
 
             """ train the bottleneck """
             ds = SupervisedDataSet(prior,prior)
-            for d in compressed_data: ds.addSample(d, d)
+            if self.dropout_on:
+                noisy_data = self.dropout(compressed_data)
+                for i,n in enumerate(noisy_data):
+                    original = compressed_data[i]
+                    ds.addSample(n, original)
+            else:
+                for d in (compressed_data): ds.addSample(d, d)
             trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
             trainer.trainEpochs(self.compression_epochs)
             #print "ABOUT TO APPEND"
@@ -189,6 +199,20 @@ class AutoEncoder(object):
                 autoencoder.addConnection(connection)
 
         return autoencoder, hidden_layers, next_layer, bias_layers
+
+    def dropout(self, data):
+        length = len(data[0])
+        zeros = round(length * 0.2)
+        ones = length - zeros
+        zeros = numpy.zeros(zeros)
+        ones = numpy.ones(ones)
+        merged = numpy.concatenate((zeros, ones), axis=1)
+        dropped = []
+        for d in data:
+            numpy.random.shuffle(merged)
+            dropped.append(merged * d)
+        return dropped
+
 
 class DNNRegressor(AutoEncoder):
 
