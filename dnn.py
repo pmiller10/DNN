@@ -11,12 +11,11 @@ the softmax layer still expects to be trained. It should eventually be moved to 
 
 class AutoEncoder(object):
 
-    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, smoothing_epochs=10, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
+    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
         self.layers = layers
         self.data = data
         self.targets = targets
         self.compression_epochs = compression_epochs
-        self.smoothing_epochs = smoothing_epochs
         self.verbose = verbose
         self.bias = bias
         self.autoencoding_only = autoencoding_only
@@ -256,8 +255,8 @@ def test():
     targets.append(1)
 
     layers = [4,2,1]
-    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=True)
-    #dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, smoothing_epochs=0, bias=True, autoencoding_only=False)
+    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=True)
+    #dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=False)
     dnn = dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
     print "\n-----"
