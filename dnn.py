@@ -11,9 +11,10 @@ the softmax layer still expects to be trained. It should eventually be moved to 
 
 class AutoEncoder(object):
 
-    def __init__(self, data, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
+    def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
         self.layers = layers
-        self.data = data
+        self.supervised = supervised
+        self.unsupervised = unsupervised
         self.targets = targets
         self.compression_epochs = compression_epochs
         self.verbose = verbose
@@ -60,7 +61,8 @@ class AutoEncoder(object):
     def _train(self):
         hidden_layers = []
         bias_layers = []
-        compressed_data = copy.copy(self.data) # it isn't compressed at this point, but will be later on
+        compressed_data = copy.copy(self.unsupervised) # it isn't compressed at this point, but will be later on
+        compressed_supervised = self.supervised
 
         mid_layers = self.layers[1:-1] # remove the first and last
         for i,current in enumerate(mid_layers):
@@ -115,6 +117,7 @@ class AutoEncoder(object):
             compressor.addConnection(in_to_hidden)
             compressor.sortModules()
             compressed_data = [compressor.activate(d) for d in compressed_data]
+            compressed_supervised = [compressor.activate(d) for d in compressed_supervised]
 
             self.nn.append(compressor)
             #print "Compressed data after stage {0} {1}".format(i, compressed_data)
@@ -135,7 +138,7 @@ class AutoEncoder(object):
         softmax.sortModules()
 
         ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        for i,d in enumerate(compressed_data):
+        for i,d in enumerate(compressed_supervised):
             target = self.targets[i]
             ds.addSample(d, target)
         trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
