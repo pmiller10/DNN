@@ -11,7 +11,7 @@ the softmax layer still expects to be trained. It should eventually be moved to 
 
 class AutoEncoder(object):
 
-    def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=False, bias=True, autoencoding_only=True, dropout_on=True):
+    def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=True, bias=True, autoencoding_only=True, dropout_on=True):
         self.layers = layers
         self.supervised = supervised
         self.unsupervised = unsupervised
@@ -102,6 +102,7 @@ class AutoEncoder(object):
             else:
                 for d in (compressed_data): ds.addSample(d, d)
             trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
+            print "...training for layer ", prior, " to ", current
             trainer.trainEpochs(self.compression_epochs)
             #print "ABOUT TO APPEND"
             #print in_to_hidden.params
@@ -138,7 +139,8 @@ class AutoEncoder(object):
         softmax.sortModules()
 
         ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        for i,d in enumerate(compressed_supervised):
+        noisy_data = self.dropout(compressed_supervised)
+        for i,d in enumerate(noisy_data):
             target = self.targets[i]
             ds.addSample(d, target)
         trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
