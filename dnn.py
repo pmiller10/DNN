@@ -1,6 +1,6 @@
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
-from pybrain.datasets import SupervisedDataSet
+from pybrain.datasets import SupervisedDataSet, ClassificationDataSet
 from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer, BiasUnit, FeedForwardNetwork, FullConnection
 import numpy
 import copy
@@ -12,6 +12,8 @@ the softmax layer still expects to be trained. It should eventually be moved to 
 class AutoEncoder(object):
 
     def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=True, bias=True, autoencoding_only=True, dropout_on=True):
+        if len(layers) > 8:
+            raise Exception("Must have 8 layers or fewer")
         self.layers = layers
         self.supervised = supervised
         self.unsupervised = unsupervised
@@ -124,6 +126,7 @@ class AutoEncoder(object):
             #print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
 	    """ Train the softmax layer """
+        print "...training for softmax layer "
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
         out_layer = self.final_layer(self.layers[-1])
@@ -138,11 +141,22 @@ class AutoEncoder(object):
             softmax.addConnection(bias_in)
         softmax.sortModules()
 
-        ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
+        # see if it's for classification or regression
+        if self.final_layer == SoftmaxLayer:
+            print "...training for a softmax network"
+            ds = ClassificationDataSet(self.layers[-2], 1)
+        else:
+            print "...training for a regression network"
+            ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
         noisy_data = self.dropout(compressed_supervised)
         for i,d in enumerate(noisy_data):
             target = self.targets[i]
             ds.addSample(d, target)
+
+        # see if it's for classification or regression
+        if self.final_layer == SoftmaxLayer:
+            ds._convertToOneOfMany()
+
         trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
@@ -206,7 +220,7 @@ class AutoEncoder(object):
 
     def dropout(self, data):
         length = len(data[0])
-        zeros = round(length * 0.2)
+        zeros = round(length * 0.0)
         ones = length - zeros
         zeros = numpy.zeros(zeros)
         ones = numpy.ones(ones)
@@ -220,9 +234,27 @@ class AutoEncoder(object):
 
 class DNNRegressor(AutoEncoder):
 
+    """ This is really ugly, but has to happen. Need to create a new network,
+    or else it can't be trained for smoothing by pybrain's trainer.train() method. """
     def fit(self):
         autoencoder, hidden_layers, next_layer, bias_layers = self._train()
-        return self.top_layer(autoencoder, hidden_layers, next_layer, bias_layers)
+        with_top_layer = self.top_layer(autoencoder, hidden_layers, next_layer, bias_layers)
+        if len(self.layers) == 2:
+            new = buildNetwork(self.layers[0], self.layers[1], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 3:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 4:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 5:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 6:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 7:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], self.layers[6], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        if len(self.layers) == 8:
+            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], self.layers[6], self.layers[8], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        new.params[:] = with_top_layer.params
+        return new
 
     def top_layer(self, autoencoder, hidden_layers, next_layer, bias_layers):
         # connect 2nd to last and last
