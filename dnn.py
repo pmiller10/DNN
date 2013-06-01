@@ -97,18 +97,16 @@ class AutoEncoder(object):
             """ train the bottleneck """
             ds = SupervisedDataSet(prior,prior)
             if self.dropout_on:
-                noisy_data = self.dropout(compressed_data)
+                noisy_data, originals = self.dropout(compressed_data, noise=0.2, bag=3, debug=True)
                 for i,n in enumerate(noisy_data):
-                    original = compressed_data[i]
+                    original = originals[i]
                     ds.addSample(n, original)
             else:
                 for d in (compressed_data): ds.addSample(d, d)
-            trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
-            print "...training for layer ", prior, " to ", current
+            trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.01, verbose=self.verbose, weightdecay=0.01)
+            print "\n...training for layer ", prior, " to ", current
             trainer.trainEpochs(self.compression_epochs)
-            #print "ABOUT TO APPEND"
-            #print in_to_hidden.params
-            #print len(in_to_hidden.params)
+            if self.verbose: print "...data:\n...", compressed_data[0][:8], "\nreconstructed to:\n...", bottleneck.activate(compressed_data[0])[:8]
 
             hidden_layers.append(in_to_hidden)
             if self.bias: bias_layers.append(bias_in)
@@ -123,7 +121,6 @@ class AutoEncoder(object):
             compressed_supervised = [compressor.activate(d) for d in compressed_supervised]
 
             self.nn.append(compressor)
-            #print "Compressed data after stage {0} {1}".format(i, compressed_data)
 
 	    """ Train the softmax layer """
         print "...training for softmax layer "
@@ -148,16 +145,21 @@ class AutoEncoder(object):
         else:
             print "...training for a regression network"
             ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        noisy_data = self.dropout(compressed_supervised)
+        bag = 10 
+        noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag, debug=True)
+        bagged_targets = []
+        for t in self.targets:
+            for b in range(bag):
+                bagged_targets.append(t)
         for i,d in enumerate(noisy_data):
-            target = self.targets[i]
+            target = bagged_targets[i]
             ds.addSample(d, target)
 
         # see if it's for classification or regression
         if self.final_layer == SoftmaxLayer:
             ds._convertToOneOfMany()
 
-        trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.1, verbose=self.verbose, weightdecay=0.01)
+        trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.01, verbose=self.verbose, weightdecay=0.01)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
         #print "ABOUT TO APPEND"
@@ -218,18 +220,29 @@ class AutoEncoder(object):
 
         return autoencoder, hidden_layers, next_layer, bias_layers
 
-    def dropout(self, data):
+    def dropout(self, data, noise=0., bag=1, debug=False):
+        if bag < 1:
+            raise Exception("bag must be 1 or greater")
         length = len(data[0])
-        zeros = round(length * 0.0)
+        zeros = round(length * noise)
         ones = length - zeros
         zeros = numpy.zeros(zeros)
         ones = numpy.ones(ones)
         merged = numpy.concatenate((zeros, ones), axis=1)
         dropped = []
+        originals = []
+        bag = range(bag) # increase by this amount
         for d in data:
-            numpy.random.shuffle(merged)
-            dropped.append(merged * d)
-        return dropped
+            for b in bag:
+                numpy.random.shuffle(merged)
+                dropped.append(merged * d)
+                originals.append(d)
+        if debug:
+            print "...number of data: ", len(data)
+            print "...number of bagged data: ", len(dropped)
+            print "...data: ", data[0][:10]
+            print "...noisy data: ", dropped[0][:10]
+        return dropped, originals
 
 
 class DNNRegressor(AutoEncoder):
