@@ -95,16 +95,16 @@ class AutoEncoder(object):
             bottleneck.sortModules()
 
             """ train the bottleneck """
+            print "\n...training for layer ", prior, " to ", current
             ds = SupervisedDataSet(prior,prior)
             if self.dropout_on:
-                noisy_data, originals = self.dropout(compressed_data, noise=0.2, bag=3, debug=True)
+                noisy_data, originals = self.dropout(compressed_data, noise=0.2, bag=1, debug=True)
                 for i,n in enumerate(noisy_data):
                     original = originals[i]
                     ds.addSample(n, original)
             else:
                 for d in (compressed_data): ds.addSample(d, d)
-            trainer = BackpropTrainer(bottleneck, dataset=ds, momentum=0.01, verbose=self.verbose, weightdecay=0.01)
-            print "\n...training for layer ", prior, " to ", current
+            trainer = BackpropTrainer(bottleneck, dataset=ds, learningrate=0.001, momentum=0.05, verbose=self.verbose, weightdecay=0.05)
             trainer.trainEpochs(self.compression_epochs)
             if self.verbose: print "...data:\n...", compressed_data[0][:8], "\nreconstructed to:\n...", bottleneck.activate(compressed_data[0])[:8]
 
@@ -123,7 +123,7 @@ class AutoEncoder(object):
             self.nn.append(compressor)
 
 	    """ Train the softmax layer """
-        print "...training for softmax layer "
+        print "\n...training for softmax layer "
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
         out_layer = self.final_layer(self.layers[-1])
@@ -145,7 +145,7 @@ class AutoEncoder(object):
         else:
             print "...training for a regression network"
             ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        bag = 10 
+        bag = 1 
         noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag, debug=True)
         bagged_targets = []
         for t in self.targets:
@@ -159,7 +159,7 @@ class AutoEncoder(object):
         if self.final_layer == SoftmaxLayer:
             ds._convertToOneOfMany()
 
-        trainer = BackpropTrainer(softmax, dataset=ds, momentum=0.01, verbose=self.verbose, weightdecay=0.01)
+        trainer = BackpropTrainer(softmax, dataset=ds, learningrate=0.001, momentum=0.05, verbose=self.verbose, weightdecay=0.05)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
         #print "ABOUT TO APPEND"
