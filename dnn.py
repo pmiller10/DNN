@@ -247,29 +247,14 @@ class AutoEncoder(object):
 
 class DNNRegressor(AutoEncoder):
 
-    """ This is really ugly, but has to happen. Need to create a new network,
-    or else it can't be trained for smoothing by pybrain's trainer.train() method. """
     def fit(self):
         autoencoder, hidden_layers, next_layer, bias_layers = self._train()
-        with_top_layer = self.top_layer(autoencoder, hidden_layers, next_layer, bias_layers)
-        if len(self.layers) == 2:
-            new = buildNetwork(self.layers[0], self.layers[1], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 3:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 4:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 5:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 6:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 7:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], self.layers[6], hiddenclass=self.hidden_layer, outclass=self.final_layer)
-        if len(self.layers) == 8:
-            new = buildNetwork(self.layers[0], self.layers[1], self.layers[2], self.layers[3], self.layers[4], self.layers[5], self.layers[6], self.layers[8], hiddenclass=self.hidden_layer, outclass=self.final_layer)
+        with_top_layer = self._top_layer(autoencoder, hidden_layers, next_layer, bias_layers)
+        new = buildNetwork(*self.layers, hiddenclass=self.hidden_layer, outclass=self.final_layer)
         new.params[:] = with_top_layer.params
         return new
 
-    def top_layer(self, autoencoder, hidden_layers, next_layer, bias_layers):
+    def _top_layer(self, autoencoder, hidden_layers, next_layer, bias_layers):
         # connect 2nd to last and last
         last_layer = hidden_layers[-1].outmod
         autoencoder.addOutputModule(last_layer)
