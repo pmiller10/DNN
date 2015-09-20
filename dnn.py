@@ -69,7 +69,6 @@ class AutoEncoder(object):
         mid_layers = self.layers[1:-1] # remove the first and last
         for i,current in enumerate(mid_layers):
             prior = self.layers[i] # This accesses the layer before the "current" one, since the indexing in mid_layers and self.layers is offset by 1
-            #print "Compressed data at stage {0} {1}".format(i, compressed_data)
 
             """ build the NN with a bottleneck """
             bottleneck = FeedForwardNetwork()
@@ -98,7 +97,7 @@ class AutoEncoder(object):
             print "\n...training for layer ", prior, " to ", current
             ds = SupervisedDataSet(prior,prior)
             if self.dropout_on:
-                noisy_data, originals = self.dropout(compressed_data, noise=0.2, bag=1, debug=True)
+                noisy_data, originals = self.dropout(compressed_data, noise=0.2, bag=1)
                 for i,n in enumerate(noisy_data):
                     original = originals[i]
                     ds.addSample(n, original)
@@ -146,7 +145,7 @@ class AutoEncoder(object):
             print "...training for a regression network"
             ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
         bag = 1 
-        noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag, debug=True)
+        noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag)
         bagged_targets = []
         for t in self.targets:
             for b in range(bag):
@@ -162,16 +161,10 @@ class AutoEncoder(object):
         trainer = BackpropTrainer(softmax, dataset=ds, learningrate=0.001, momentum=0.05, verbose=self.verbose, weightdecay=0.05)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
-        #print "ABOUT TO APPEND"
-        #print len(in_to_out.params)
         hidden_layers.append(in_to_out)
         if self.bias: bias_layers.append(bias_in)
 
         """ Recreate the whole thing """
-        #print "hidden layers: " + str(hidden_layers)
-        #print "bias layers: " + str(bias_layers)
-        #print "len hidden layers: " + str(len(hidden_layers))
-        #print "len bias layers: " + str(len(bias_layers))
         # connect the first two
         autoencoder = FeedForwardNetwork()
         first_layer = hidden_layers[0].inmod
@@ -191,10 +184,8 @@ class AutoEncoder(object):
             bias_unit = bias.inmod
             autoencoder.addModule(bias_unit)
             connection = FullConnection(bias_unit, next_layer)
-            #print bias.params
             connection.params[:] = bias.params
             autoencoder.addConnection(connection)
-            #print connection.params
 
         # connect the middle layers
         for i,h in enumerate(hidden_layers[1:-1]):
@@ -237,7 +228,7 @@ class AutoEncoder(object):
                 numpy.random.shuffle(merged)
                 dropped.append(merged * d)
                 originals.append(d)
-        if debug:
+        if self.verbose:
             print "...number of data: ", len(data)
             print "...number of bagged data: ", len(dropped)
             print "...data: ", data[0][:10]
