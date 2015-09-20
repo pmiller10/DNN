@@ -305,7 +305,7 @@ def test():
     targets.append(1)
 
     layers = [4,2,1]
-    dnn = AutoEncoder(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=True)
+    dnn = AutoEncoder(data, data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=True)
     #dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=False)
     dnn = dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
@@ -313,4 +313,5 @@ def test():
     for d in data:
         print dnn.activate(d)
 
-#test()
+if __name__ == "__main__":
+    test()
