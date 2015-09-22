@@ -9,6 +9,15 @@ import copy
 If you want 3 layers with dimensions 10,8,5 then you use layers=[10,8,5,1], where the 1 can be any number you want. This is because
 the softmax layer still expects to be trained. It should eventually be moved to a different class."""
 
+class Layer():
+
+    SIGMOID = "SigmoidLayer"
+    LINEAR = "LinearLayer"
+    TANH = "TanhLayer"
+    SOFTMAX = "SoftmaxLayer"
+
+
+
 class AutoEncoder(object):
 
     def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=True, bias=True, autoencoding_only=True, dropout_on=True):
@@ -25,29 +34,17 @@ class AutoEncoder(object):
         self.nn = []
         self.dropout_on = dropout_on
 
+        methods = dir(Layer)
+        methods.remove('__doc__')
+        methods.remove('__module__')
+
         # compression layer
-        if hidden_layer == "SigmoidLayer":
-            self.hidden_layer = SigmoidLayer
-        elif hidden_layer == "LinearLayer":
-            self.hidden_layer = LinearLayer
-        elif hidden_layer == "TanhLayer":
-            self.hidden_layer = TanhLayer
-        elif hidden_layer == "SoftmaxLayer":
-            self.hidden_layer = SoftmaxLayer
-        else:
-            raise Exception("hidden_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
+        assert hidden_layer in dir(Layer), "hidden_layer must be in {0}".format(methods)
+        self.hidden_layer = hidden_layer
 
         # final layer
-        if final_layer == "SigmoidLayer":
-            self.final_layer = SigmoidLayer
-        elif final_layer == "LinearLayer":
-            self.final_layer = LinearLayer
-        elif final_layer == "TanhLayer":
-            self.final_layer = TanhLayer
-        elif final_layer == "SoftmaxLayer":
-            self.final_layer = SoftmaxLayer
-        else:
-            raise Exception("final_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
+        assert final_layer in dir(Layer), "final_layer must be in {0}".format(methods)
+        self.final_layer = final_layer
 
     def predict(self, data):
         if not self.nn: raise Exception("You must run ._train() before you can predict")
@@ -121,7 +118,7 @@ class AutoEncoder(object):
 
             self.nn.append(compressor)
 
-	    """ Train the softmax layer """
+        """ Train the softmax layer """
         print "\n...training for softmax layer "
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
@@ -144,7 +141,7 @@ class AutoEncoder(object):
         else:
             print "...training for a regression network"
             ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        bag = 1 
+        bag = 1
         noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag)
         bagged_targets = []
         for t in self.targets:
