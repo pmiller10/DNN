@@ -5,15 +5,21 @@ from pybrain.structure import LinearLayer, SigmoidLayer, TanhLayer, SoftmaxLayer
 import numpy
 import copy
 
-""" At this point, to use the autoencoder, you must always add one more layer into the layers argument than you actually want.
-If you want 3 layers with dimensions 10,8,5 then you use layers=[10,8,5,1], where the 1 can be any number you want. This is because
-the softmax layer still expects to be trained. It should eventually be moved to a different class."""
+
+
+class Layer():
+
+    SIGMOID = SigmoidLayer
+    LINEAR = LinearLayer
+    TANH = TanhLayer
+    SOFTMAX = SoftmaxLayer
+
 
 class AutoEncoder(object):
 
+    # TODO still need to add one more layer than you actually want because this is training the softmax
+    # need to create a DNNClassifier class in addition to the Regressor class
     def __init__(self, supervised, unsupervised, targets, layers=[], hidden_layer="SigmoidLayer", final_layer="SigmoidLayer", compression_epochs=100, verbose=True, bias=True, autoencoding_only=True, dropout_on=True):
-        if len(layers) > 8:
-            raise Exception("Must have 8 layers or fewer")
         self.layers = layers
         self.supervised = supervised
         self.unsupervised = unsupervised
@@ -25,29 +31,17 @@ class AutoEncoder(object):
         self.nn = []
         self.dropout_on = dropout_on
 
+        methods = dir(Layer)
+        methods.remove('__doc__')
+        methods.remove('__module__')
+
         # compression layer
-        if hidden_layer == "SigmoidLayer":
-            self.hidden_layer = SigmoidLayer
-        elif hidden_layer == "LinearLayer":
-            self.hidden_layer = LinearLayer
-        elif hidden_layer == "TanhLayer":
-            self.hidden_layer = TanhLayer
-        elif hidden_layer == "SoftmaxLayer":
-            self.hidden_layer = SoftmaxLayer
-        else:
-            raise Exception("hidden_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
+        assert hidden_layer in dir(Layer), "hidden_layer must be in {0}".format(methods)
+        self.hidden_layer = getattr(Layer, hidden_layer)
 
         # final layer
-        if final_layer == "SigmoidLayer":
-            self.final_layer = SigmoidLayer
-        elif final_layer == "LinearLayer":
-            self.final_layer = LinearLayer
-        elif final_layer == "TanhLayer":
-            self.final_layer = TanhLayer
-        elif final_layer == "SoftmaxLayer":
-            self.final_layer = SoftmaxLayer
-        else:
-            raise Exception("final_layer must be either: 'LinearLayer', 'SoftmaxLayer', 'SigmoidLayer', or 'TanhLayer'")
+        assert final_layer in dir(Layer), "final_layer must be in {0}".format(methods)
+        self.final_layer = getattr(Layer, final_layer)
 
     def predict(self, data):
         if not self.nn: raise Exception("You must run ._train() before you can predict")
@@ -70,7 +64,7 @@ class AutoEncoder(object):
         for i,current in enumerate(mid_layers):
             prior = self.layers[i] # This accesses the layer before the "current" one, since the indexing in mid_layers and self.layers is offset by 1
 
-            """ build the NN with a bottleneck """
+            # build the NN with a bottleneck
             bottleneck = FeedForwardNetwork()
             in_layer = LinearLayer(prior)
             hidden_layer = self.hidden_layer(current)
@@ -93,7 +87,7 @@ class AutoEncoder(object):
                 bottleneck.addConnection(bias_hidden)
             bottleneck.sortModules()
 
-            """ train the bottleneck """
+            # train the bottleneck
             print "\n...training for layer ", prior, " to ", current
             ds = SupervisedDataSet(prior,prior)
             if self.dropout_on:
@@ -110,7 +104,7 @@ class AutoEncoder(object):
             hidden_layers.append(in_to_hidden)
             if self.bias: bias_layers.append(bias_in)
 
-            """ use the params from the bottleneck to compress the training data """
+            # use the params from the bottleneck to compress the training data
             compressor = FeedForwardNetwork()
             compressor.addInputModule(in_layer)
             compressor.addOutputModule(hidden_layer) # use the hidden layer from above
@@ -121,7 +115,7 @@ class AutoEncoder(object):
 
             self.nn.append(compressor)
 
-	    """ Train the softmax layer """
+        # Train the softmax layer
         print "\n...training for softmax layer "
         softmax = FeedForwardNetwork()
         in_layer = LinearLayer(self.layers[-2])
@@ -144,7 +138,7 @@ class AutoEncoder(object):
         else:
             print "...training for a regression network"
             ds = SupervisedDataSet(self.layers[-2], self.layers[-1])
-        bag = 1 
+        bag = 1
         noisy_data, _ = self.dropout(compressed_supervised, noise=0.5, bag=bag)
         bagged_targets = []
         for t in self.targets:
@@ -158,13 +152,14 @@ class AutoEncoder(object):
         if self.final_layer == SoftmaxLayer:
             ds._convertToOneOfMany()
 
+        # TODO make these configurable
         trainer = BackpropTrainer(softmax, dataset=ds, learningrate=0.001, momentum=0.05, verbose=self.verbose, weightdecay=0.05)
         trainer.trainEpochs(self.compression_epochs)
         self.nn.append(softmax)
         hidden_layers.append(in_to_out)
         if self.bias: bias_layers.append(bias_in)
 
-        """ Recreate the whole thing """
+        # Recreate the whole thing
         # connect the first two
         autoencoder = FeedForwardNetwork()
         first_layer = hidden_layers[0].inmod
@@ -263,6 +258,8 @@ class DNNRegressor(AutoEncoder):
         autoencoder.sortModules()
         return autoencoder
 
+
+
 def test():
     data = []
     data.append([0,0,1,1])
@@ -281,7 +278,7 @@ def test():
     targets.append(1)
 
     layers = [4,2,1]
-    dnn = AutoEncoder(data, data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=True)
+    dnn = AutoEncoder(data, data, targets, layers, hidden_layer="TANH", final_layer="TANH", compression_epochs=50, bias=True, autoencoding_only=True)
     #dnn = DNNRegressor(data, targets, layers, hidden_layer="TanhLayer", final_layer="TanhLayer", compression_epochs=50, bias=True, autoencoding_only=False)
     dnn = dnn.fit()
     data.append([0.9, 0.8, 0, 0.1])
